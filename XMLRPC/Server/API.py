@@ -1,17 +1,38 @@
 import sys
+import threading
+import time
 from xmlrpc.server import SimpleXMLRPCServer
 from xmlrpc.client import ServerProxy
 
-serverMaster = ServerProxy('http://localhost:8000',allow_none=True)
-
 class MyFunctions:
 
-    def __init__(self,workersURL):
+    def __init__(self,masterURL='http://localhost:8000',workersURL = []):
         self.workersURL = workersURL
 
+        self.masterURL=masterURL
+        self.serverMaster = ServerProxy(self.masterURL,allow_none=True)
+ 
+
     def workers(self):
-        self.workersURL = serverMaster.getURL()
+        try:
+            self.workersURL = self.serverMaster.getURL()
+        except ConnectionRefusedError:
+            try:
+                """t = threading.Thread(target=MyFunctions.getURLLeader,args=(self,""))
+                t.daemon=True
+                t.start()"""
+                print("Master Down")
+                
+            except ConnectionRefusedError:
+                sys.exit(0)
+        
         return (self.workersURL)
+    
+    def getURLLeader(self, workerURL):
+        print("Leader:" + workerURL)
+        self.masterURL =  workerURL
+        self.serverMaster = ServerProxy(self.masterURL,allow_none=True)
+        return ("OK")
 
     def readAPI(self):
         allItems = []
@@ -78,7 +99,7 @@ class MyFunctions:
         return (str(max(maxWorkers)))
 
 with SimpleXMLRPCServer(('localhost', 8001)) as server:
-    server.register_instance(MyFunctions([]), allow_dotted_names=True)
+    server.register_instance(MyFunctions('http://localhost:8000'), allow_dotted_names=True)
     server.register_multicall_functions()
     print('Serving XML-RPC on localhost port 8001')
     
